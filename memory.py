@@ -23,3 +23,4 @@ class replay_memory:
         sample_size = min(self.__len__(), batch_size)
         return Batch(random.sample(self.data, sample_size), sample_size)
 
+
