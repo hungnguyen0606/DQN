@@ -6,11 +6,12 @@ from collections import namedtuple
 import os
 
 collection_dict = namedtuple('collection_dict', ['lstate', 'laction', 'lreward', 'lnext_state', 'lterminal'])
-model_param_ = namedtuple('model_settings', ['lr', 'lr_decay', 'lr_decay_step',
-                                             'epsilon', 'epsilon_decay', 'epsilon_decay_step',
+model_param_ = namedtuple('model_settings', ['lr', 'lr_decay',
+                                             'epsilon', 'epsilon_decay',
                                              'gamma', 'freeze_time', 'load_path', 'save_path', 'save_time'])
 
-batch_size = 2048
+batch_size = 8
+
 
 class ModelParam(model_param_):
     """
@@ -35,7 +36,6 @@ class Agent:
         self.source_net = q_estimator.QEstimator(self.env.sample_action, self.env.get_state_size(), self.env.get_num_actions(), 'SourceNet')
         self.target_net = q_estimator.QEstimator(self.env.sample_action, self.env.get_state_size(), self.env.get_num_actions(), 'TargetNet')
 
-        self.gamma = 0.99
         self.global_step = tf.Variable(0, dtype=tf.int32, name='global_step')
         # creating 'update target' ops
         s_vars = [t for t in tf.trainable_variables() if t.name.startswith(self.source_net.scope)]
@@ -54,7 +54,7 @@ class Agent:
         self.sess.run(self.init_ops)
         # self.rewards = tf.placeholder(tf.float32, [None, 1], name='rewards')
         # self.inputs = np.zeros([0]) #
-        # self.get_target = self.rewards + self.gamma*self.target_net.Q_Value(self.sess, )
+        # self.get_target = self.rewards + self.setting.gamma*self.target_net.Q_Value(self.sess, )
         checkpoint = tf.train.get_checkpoint_state(os.path.join(self.setting.load_path, 'models', ''))
         if checkpoint and checkpoint.model_checkpoint_path:
             self.saver.restore(self.sess, checkpoint.model_checkpoint_path)
@@ -76,7 +76,7 @@ class Agent:
         assert np.array(inputs).shape[1] == self.env.get_state_size(), \
             'Shape of inputs doesn\'t match STATE_SIZE: %d != %d' %\
             (inputs.shape[1], self.env.get_state_size())
-        target = rewards + self.gamma*terminals*np.max(self.target_net.Q_Value(self.sess, inputs), axis=1, keepdims=True)
+        target = rewards + self.setting.gamma*terminals*np.max(self.target_net.Q_Value(self.sess, inputs), axis=1, keepdims=True)
 
         return target
 
@@ -112,14 +112,14 @@ class Agent:
                                lnext_state=lnext_state,
                                lterminal=lterminal)
 
-    def update_target_by_source(self, local_step, global_step=0):
+    def update_target_by_source(self, global_step):
         self.sess.run(self.update_ops)
 
-    def get_lr(self, local_step, global_step = 0):
-        return self.setting.lr*self.setting.lr_decay**(1.0*local_step/self.setting.lr_decay_step)
+    def get_lr(self, global_step):
+        return self.setting.lr*np.exp(-self.setting.lr_decay*global_step)
 
-    def get_eps(self, local_step, global_step = 0):
-        return self.setting.epsilon * self.setting.epsilon_decay**(1.0*local_step/self.setting.epsilon_decay_step)
+    def get_eps(self, global_step):
+        return self.setting.epsilon*np.exp(-self.setting.epsilon_decay*global_step)
 
     def run_step(self, state, episode=0):
         """
@@ -137,7 +137,11 @@ class Agent:
 
         return next_state, reward, done
 
-    def run_episode(self, episode):
+    def full_update(self, gb_step):
+        self.update_target_by_source(gb_step)
+        pass
+
+    def run_episode(self, episode, max_step = 15000):
         """
 
         :param episode: number of current episode
@@ -146,9 +150,12 @@ class Agent:
         state = self.env.reset_environment()
         lreward = []
         lloss = []
+        total_reward = 0
 
-        while True:
-            next_state, reward, done = self.run_step(state, episode)
+        for _ in range(max_step):
+            gb_step = self.sess.run(self.global_step)
+            next_state, reward, done = self.run_step(state, gb_step)
+            total_reward += reward
             state = next_state
 
             # prepare data, compute & apply gradient
@@ -157,15 +164,15 @@ class Agent:
             target = self.get_target(data.lnext_state, data.lreward, data.lterminal)
             # print(self.source_net.train())
             _loss = self.source_net.train(self.sess, data.lstate, data.laction, target,
-                                        self.get_lr(episode))
-            lloss.append(_loss)
-            lreward.append(reward)
+                                        self.get_lr(gb_step))
 
-            self.env.render()
+
+            self.full_update(gb_step)
+            self.sess.run(self.global_step.assign(tf.add(self.global_step, 1), 'update_global_step'))
             if done:
                 break
 
-        return lreward, lloss
+        return total_reward
 
     def init_memory(self):
         """
@@ -173,12 +180,12 @@ class Agent:
         :return:
         """
         # populate memory
-        while len(self.memory) < batch_size:
-            state = self.env.reset_environment()
-            while True:
-                state, _, done = self.run_step(state)
-                if done:
-                    break
+        state = self.env.reset_environment()
+        for i in range(batch_size):
+            state, _, done = self.run_step(state)
+            if done:
+                state = self.env.reset_environment()
+                break
 
     def train(self, max_episode):
         """
@@ -193,17 +200,11 @@ class Agent:
             gb_step = self.sess.run(self.global_step)
 
             # this is important, please do not remove when override this method
-            lreward, lloss = self.run_episode(episode)
-            self.update_target_by_source(0)
+            total_reward = self.run_episode(episode, 15000)
+
             # ---------------------------------------------------------------
             # you can remove this prompt
-            print(lloss)
-            print('Episode %d - Loss %f - Reward %f'%(episode, np.mean(lloss), np.sum(lreward)))
             # ---------------------------------------------------------------
 
-            # please modify this part as you want to save the agent
-            self.sess.run(self.global_step.assign(tf.add(self.global_step, 1), name='increase_global_step'))
-            self.saver.save(self.sess, os.path.join(self.setting.save_path, 'models/', ''),
-                            global_step=episode)
 
 

@@ -21,12 +21,13 @@ class QEstimator:
             self.build_model()
 
     def build_model(self):
+        leakyRelu = lambda x: tf.where(x<0, 0.01*x, x, name='LeakyRelu')
         self.target = tf.placeholder(tf.float32, [None, 1], 'target')
 
         self.input = tf.placeholder(tf.float32, [None, self.state_size], name='observation')
-        self.hidden1 = layers.fully_connected(self.input, 512)
-        self.hidden2 = layers.fully_connected(self.hidden1, 256)
-        self.q_value = layers.fully_connected(self.hidden1, self.num_actions, activation_fn=None)
+        self.hidden1 = layers.fully_connected(self.input, 128, activation_fn=leakyRelu)
+        self.hidden2 = layers.fully_connected(self.hidden1, 64, activation_fn=leakyRelu)
+        self.q_value = layers.fully_connected(self.hidden2, self.num_actions, activation_fn=None)
 
         self.prediction = tf.gather(tf.argmax(self.q_value, axis=1, name='greedy_action_array'), 0,
                                     name='greedy_action_scalar')
@@ -37,7 +38,7 @@ class QEstimator:
         self.loss = tf.reduce_mean(
             (self.target - tf.reduce_sum(self.q_value * self.action_mask, axis=1, keep_dims=True)) ** 2, name='loss')
         self.lr = tf.placeholder(tf.float32, name='learning_rate')
-        self.train_ops = tf.train.RMSPropOptimizer(self.lr, 0.99, 0.0, 1e-6).minimize(self.loss)
+        self.train_ops = tf.train.AdamOptimizer(self.lr).minimize(self.loss)
 
     def Q_Value(self, sess, states):
         """
