@@ -1,10 +1,14 @@
 import argparse
-import numpy as np
 import gym
 from gym import wrappers
-from problem import Problem
-from agent import Agent, ModelParam
+import numpy as np
+from collections import deque
+from Deep_Qlearning.problem import Problem
+from Deep_Qlearning.agent import ModelParam, Agent
+
+import cv2 as cv
 import tensorflow as tf
+
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 from matplotlib import cm
@@ -45,24 +49,27 @@ parser.add_argument('--test', dest='test_model', action='store_true', help='Test
 parser.set_defaults(test_model=False)
 args = parser.parse_args()
 
-
-# --------------------------------------------------------------------------------
-
-
-class MountainProblem(Problem):
+class PongProblem(Problem):
     def __init__(self, save_path, is_test=False):
-        self.env = gym.make('MountainCar-v0')
+        self.env = gym.make('Pong-v0')
         if is_test:
             self.env = wrappers.Monitor(self.env, save_path, force=True)
-        self.low = np.array(self.env.observation_space.low)
-        self.high = np.array(self.env.observation_space.high)
-        self.range = (self.high - self.low)
+        self.current_state = deque(maxlen=4)
+
+        with tf.variable_scope("state_processor"):
+            self.input_state = tf.placeholder(shape=[210, 160, 3], dtype=tf.uint8)
+            self.output = tf.image.rgb_to_grayscale(tf.to_double(self.input_state))
+            self.output = tf.image.crop_to_bounding_box(self.output, 34, 0, 160, 160)
+            self.output = tf.image.resize_images(self.output, (84, 84), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+            self.output = tf.squeeze(self.output)/255.0
+        self.sess = tf.Session()
+        self.sess.run(tf.global_variables_initializer())
 
     def get_state_size(self):
-        return 2
+        return 84, 84, 4
 
     def get_num_actions(self):
-        return 3
+        return self.env.action_space.n
 
     def sample_action(self):
         return self.env.action_space.sample()
@@ -75,20 +82,29 @@ class MountainProblem(Problem):
     def reset_environment(self):
         state = self.env.reset()
         state = self.state_normalize(state)
-        return state
+        # save last 4 frames
+        self.current_state.append(state)
+        self.current_state.append(state)
+        self.current_state.append(state)
+        self.current_state.append(state)
+        return np.stack(self.current_state, axis=2)
 
     def state_normalize(self, state):
-        state = np.array(state)
-        return (state - self.low) / self.range
+        # state = np.mean(state, axis=2)/255
+        # state = cv.resize(state[34:194,...], (84, 84))
+        tmp = self.sess.run(self.output, {self.input_state:state})
+        return tmp
 
     def step(self, action):
         next_state, reward, done, _ = self.env.step(action)
         next_state = self.state_normalize(next_state)
-        return next_state, reward, done
+        # save the last 4 frames
+        self.current_state.append(next_state)
+
+        return np.stack(self.current_state, axis=2), reward, done
 
     def render(self):
         self.env.render()
-
 
 class MyAgent(Agent):
     def __init__(self, environment, model_setting):
@@ -168,7 +184,7 @@ class MyAgent(Agent):
 
             next_state, reward, done = self.run_step(state, gb_step)
             total_reward += reward
-            state = next_state
+            state = next_state.copy()
 
             # prepare data, compute & apply gradient
             data = self.prepare_batch()
@@ -270,15 +286,15 @@ if __name__ == '__main__':
         os.mkdir(setting.save_path)
         os.mkdir(os.path.join(setting.save_path, 'models'))
 
-    prob = MountainProblem(setting.save_path, args.test_model)
+    prob = PongProblem(setting.save_path, args.test_model)
     my_agent = MyAgent(prob, setting)
-    # if args.test_model:
-    #     print("Testing model")
-    #     my_agent.test(args.n_eps[0])
-    # else:
-    #     print("Training model")
-    #     my_agent.train(args.n_eps[0])
+    if args.test_model:
+        print("Testing model")
+        my_agent.test(args.n_eps[0])
+    else:
+        print("Training model")
+        my_agent.train(args.n_eps[0])
 
     # my_agent.test(args.n_eps[0])
-    my_agent.visualize()
-    # my_agent.show_weight()
+    # my_agent.visualize()
+    # my_agent.show_weight(

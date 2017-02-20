@@ -1,7 +1,7 @@
 from collections import deque
 from collections import namedtuple
 import random
-max_size = 100000
+max_size = 20000
 Transition = namedtuple('Transition', ['state', 'action', 'reward', 'next_state', 'terminal'])
 Batch = namedtuple('Batch', ['data', 'size'])
 class replay_memory:
@@ -21,7 +21,7 @@ class replay_memory:
         if done:
             terminal = 0
 
-        self.data.append(Transition(state, action, reward, next_state, terminal))
+        self.data.append(Transition(state.copy(), action, reward, next_state.copy(), terminal))
 
     def sample(self, batch_size):
         sample_size = min(self.__len__(), batch_size)

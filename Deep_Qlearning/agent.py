@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
-import q_estimator
-from memory import replay_memory
+from . import q_estimator
+from .memory import replay_memory
 from collections import namedtuple
 import os
 
@@ -10,7 +10,7 @@ model_param_ = namedtuple('model_settings', ['lr', 'lr_decay',
                                              'epsilon', 'epsilon_decay',
                                              'gamma', 'freeze_time', 'load_path', 'save_path', 'save_time'])
 
-batch_size = 8
+batch_size = 64
 
 
 class ModelParam(model_param_):
@@ -73,9 +73,7 @@ class Agent:
         :param terminals: (BATCH_SIZE *1) list of terminal sign (0: if state is a terminal, 1: otherwise)
         :return: (BATCH_SIZE * 1) list of target values
         """
-        assert np.array(inputs).shape[1] == self.env.get_state_size(), \
-            'Shape of inputs doesn\'t match STATE_SIZE: %d != %d' %\
-            (inputs.shape[1], self.env.get_state_size())
+
         target = rewards + self.setting.gamma*terminals*np.max(self.target_net.Q_Value(self.sess, inputs), axis=1, keepdims=True)
 
         return target
@@ -98,11 +96,11 @@ class Agent:
             lnext_state.append(sample.next_state)
             lterminal.append(sample.terminal)
 
-        lstate = np.array(lstate).reshape(-1, self.env.get_state_size())
+        lstate = np.array(lstate).reshape(-1, *self.env.get_state_size())
         # the action list will be mapped to one hot vectors later,
         # so you don't need to change the shape of it.
         # laction = ...
-        lnext_state = np.array(lnext_state).reshape(-1, self.env.get_state_size())
+        lnext_state = np.array(lnext_state).reshape(-1, *self.env.get_state_size())
         lreward = np.array(lreward).reshape(-1, 1)
         lterminal = np.array(lterminal).reshape(-1, 1)
 

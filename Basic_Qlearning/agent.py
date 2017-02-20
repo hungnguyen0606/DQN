@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
-import q_estimator
-from memory import replay_memory
+from . import q_estimator
+from .memory import replay_memory
 from collections import namedtuple
 import os
 
