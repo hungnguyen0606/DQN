@@ -10,7 +10,7 @@ model_param_ = namedtuple('model_settings', ['lr', 'lr_decay',
                                              'epsilon', 'epsilon_decay',
                                              'gamma', 'freeze_time', 'load_path', 'save_path', 'save_time'])
 
-batch_size = 200
+batch_size = 100
 
 
 class ModelParam(model_param_):
