@@ -142,7 +142,7 @@ class MyAgent(Agent):
     def full_update(self, gb_step, **kwargs):
         self.env.render()
 
-        if gb_step % self.setting.freeze_time == 0:
+        if gb_step % self.setting.save_time == 0:
             self.saver.save(self.sess, os.path.join(self.setting.save_path, 'models/', ''),
                             global_step=gb_step)
         self.update_target_by_source(gb_step)
@@ -272,13 +272,13 @@ if __name__ == '__main__':
 
     prob = MountainProblem(setting.save_path, args.test_model)
     my_agent = MyAgent(prob, setting)
-    # if args.test_model:
-    #     print("Testing model")
-    #     my_agent.test(args.n_eps[0])
-    # else:
-    #     print("Training model")
-    #     my_agent.train(args.n_eps[0])
+    if args.test_model:
+        print("Testing model")
+        my_agent.test(args.n_eps[0])
+    else:
+        print("Training model")
+        my_agent.train(args.n_eps[0])
 
     # my_agent.test(args.n_eps[0])
-    my_agent.visualize()
+    #my_agent.visualize()
     # my_agent.show_weight()
