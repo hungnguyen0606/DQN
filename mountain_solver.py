@@ -95,8 +95,11 @@ class MyAgent(Agent):
         super().__init__(environment, model_setting)
         self.summary_loss = tf.placeholder(tf.float32)
         self.summary_total_reward = tf.placeholder(tf.float32)
+        self.summary_test_reward = tf.placeholder(tf.float32)
+
         tf.summary.scalar("loss", tf.reduce_mean(self.summary_loss), collections=['loss'])
         tf.summary.scalar("reward", tf.reduce_sum(self.summary_total_reward), collections=['reward'])
+        tf.summary.scalar("test_reward", tf.reduce_sum(self.summary_test_reward), collections=['test'])
         self.img = tf.placeholder(dtype=tf.uint8, name='qimage')
         tf.summary.image("max_Qvalue", self.img, max_outputs=100, collections=['image'])
         self.merge_summary = tf.summary.merge_all()
@@ -195,30 +198,28 @@ class MyAgent(Agent):
         for episode in range(max_episode):
             # last = self.source_net.Q_Value(self.sess, states)
             reward = self.run_episode(episode=episode, max_step=10000)
+            gb = self.sess.run(self.global_step)
             summary = self.sess.run(tf.summary.merge_all(key='reward'), {self.summary_total_reward: reward})
-            self.train_writer.add_summary(summary, self.sess.run(self.global_step))
+            self.train_writer.add_summary(summary, gb)
+
+            test_reward = self.test(1, 10000)
+            summary = self.sess.run(tf.summary.merge_all(key='test'), {self.summary_test_reward: test_reward})
+            self.train_writer.add_summary(summary, gb)
             print("Episode Reward {}".format(reward))
-            lreward.append(reward)
-            # summary = self.sess.run(self.merge_summary, {self.img: self.visualize()})
-            # summary = self.sess.run(tf.summary.merge_all(key='statistics'), { self.summary_loss: lloss, self.summary_total_reward: lreward})
-            # self.train_writer.add_summary(summary, self.sess.run(self.global_step))
 
-            # if episode % 10 == 0:
-            #     print("Addingggggggggggggggg img")
-            #     combine_img.append(self.visualize())
-            #     summary = self.sess.run(tf.summary.merge_all(key='image'), {self.img:combine_img})
-            #     self.train_writer.add_summary(summary, self.sess.run(self.global_step))
-
-
-    def test(self, max_episode):
+    def test(self, max_episode, max_step = 15000):
+        total_reward = 0
         for episode in range(max_episode):
             state = self.env.reset_environment()
-            while True:
+            for _ in range(max_step):
                 action = self.source_net.predict(self.sess, state)
                 state, reward, done = self.env.step(action)
+                total_reward += reward
                 self.env.render()
                 if done:
                     break
+
+        return 1.0*total_reward/max_episode
 
     def visualize(self):
         x = np.linspace(0, 1, 1000)
@@ -231,17 +232,13 @@ class MyAgent(Agent):
         for i in range(len(x)):
             for j in range(len(y)):
                 z[i, j] = z_[i*ny+j]#np.max(self.source_net.Q_Value(self.sess, np.array([[x[i], y[j]]])), axis = 1)
-        x, y = np.meshgrid(x, y)
-        # fig = plt.figure()
-        # ax = fig.gca(projection='3d')
-        # surf = ax.plot_surface(x, y, z, cmap=cm.coolwarm, linewidth=0, antialiased=False)
+
         plt.imshow(z, vmin=np.min(z), vmax=np.max(z), origin='lower', extent=[0, 1, 0, 1])
         # plt.scatter(x, y, c=z)
         plt.colorbar()
         plt.show()
 
 
-        return data.astype(np.uint8)
 
     def show_weight(self):
         w1, b1, w2, b2, w3, b3 = self.sess.run([t for t in tf.trainable_variables() if t.name.startswith('SourceNet')])
