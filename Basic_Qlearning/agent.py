@@ -10,7 +10,7 @@ model_param_ = namedtuple('model_settings', ['lr', 'lr_decay',
                                              'epsilon', 'epsilon_decay',
                                              'gamma', 'freeze_time', 'load_path', 'save_path', 'save_time'])
 
-batch_size = 100
+batch_size = 200
 
 
 class ModelParam(model_param_):
@@ -105,7 +105,6 @@ class Agent:
         lnext_state = np.array(lnext_state).reshape(-1, self.env.get_state_size())
         lreward = np.array(lreward).reshape(-1, 1)
         lterminal = np.array(lterminal).reshape(-1, 1)
-
         return collection_dict(lstate=lstate,
                                laction=laction,
                                lreward=lreward,
@@ -185,7 +184,6 @@ class Agent:
             state, _, done = self.run_step(state)
             if done:
                 state = self.env.reset_environment()
-                break
 
     def train(self, max_episode):
         """
