@@ -17,5 +17,5 @@
 #python3 mountain_solver.py --lr 0.001 --lr_decay 0.0 --eps 0.9 --eps_decay 0.000007  --n_eps 5000 --save_path ./virtualenv_acce05_phase1 --freeze_time 1000 --stime 1000 --gamma 0.98 
 #python3 mountain_solver.py --lr 0.001 --lr_decay 0.0 --eps 0.9 --eps_decay 0.000007  --n_eps 1000 --save_path ./visualize --freeze_time 1000 --stime 1000 --gamma 0.98 --load_path ./virtualenv_acce08_phase2 --test
 
-python3 test.py --lr 0.001 --lr_decay 0.0 --eps 0.9 --eps_decay 0.000007  --n_eps 1000 --save_path ./test_policy_gradient --freeze_time 1000 --stime 10 --gamma 0.98
+python3 pong_policygradient.py --lr 0.001 --lr_decay 0.0 --eps 0.9 --eps_decay 0.000007  --n_eps 1000 --save_path ./test_policy_gradient --freeze_time 1000 --stime 10 --gamma 0.98
 

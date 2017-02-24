@@ -8,6 +8,7 @@ from tensorflow.contrib import layers
 from PolicyGradient.problem import Problem
 from PolicyGradient.memory import replay_memory
 from PolicyGradient.agent import ModelParam
+import time
 num_actions = 6
 state_size = 128
 action_list = list(range(6))
@@ -66,15 +67,17 @@ class PolicyPong(Problem):
 
     def step(self, action):
         state, reward, done, _ = self.env.step(action)
-        return state, reward, done
+        return self.state_normalize(state), reward, done
 
     def reset_environment(self):
         state = self.env.reset()
-        return state
+        return self.state_normalize(state)
 
     def render(self):
         self.env.render()
 
+    def state_normalize(self, state):
+        return state/255.0
 
 class Actor():
     def __init__(self, scope, state_size, num_action):
@@ -99,10 +102,9 @@ class Actor():
         self.policy_loss = tf.reduce_mean(tf.log(tf.reduce_sum(self.policy*self.actions, axis=1, name='sum'), name='log')*self.value, name='policy_loss')
 
         # use gradient ascent to maximize the expected return
-        self.train_ops = tf.train.AdamOptimizer(self.lr).minimize(-self.policy_loss)
+        self.train_ops = tf.train.RMSPropOptimizer(self.lr).minimize(-self.policy_loss)
 
     def train(self, sess, lr, inputs, actions, values):
-        print(lr)
         sess.run(self.train_ops, {self.inputs: inputs, self.action_indices: actions, self.value: values, self.lr: lr})
 
     def predict(self, sess, state):
@@ -135,7 +137,7 @@ class PolicyAgent():
         else:
             print("Unable to find the old agent.")
 
-    def generate_batch(self, batch_size=10):
+    def generate_batch(self, batch_size):
         lstate = []
         lreward = []
         laction = []
@@ -164,16 +166,26 @@ class PolicyAgent():
         return lstate, laction, lreward, average_reward
 
     def get_lr(self):
-        return 0.1
-        pass
+        return self.setting.lr
+
+    def run_for_fun(self):
+        state = self.prob.reset_environment()
+        while True:
+            action = self.actor.predict(self.sess, state)
+            _, _, done = self.prob.step(action)
+            self.prob.render()
+            if done:
+                break
 
     def train(self, max_step=5000, batch_size=10):
         gb = self.sess.run(self.global_step)
         for _ in range(max_step):
+            start = time.time()
             b_inputs, b_actions, b_values, average_reward = self.generate_batch(batch_size)
-            print(b_values)
-            print("Step {}\nLearning rate {}\nAverage reward {}".format(_, self.get_lr(), average_reward))
+            #print(b_values)
+
             self.actor.train(self.sess, self.get_lr(), b_inputs, b_actions, b_values)
+            print("Step {} - Elapsed time: {}s\nLearning rate {}\nAverage reward {}".format(_, time.time()-start,self.get_lr(), average_reward))
             summary = self.sess.run(tf.summary.merge_all(key='reward'), {self.average_reward: average_reward})
             self.train_writer.add_summary(summary, gb)
 
@@ -183,12 +195,10 @@ class PolicyAgent():
             gb += 1
             self.sess.run(self.global_step.assign(gb))
 
+            if _ % 1 == 0:
+                print("Play for fun")
+                self.run_for_fun()
 
-
-
-
-
-        pass
 
 if __name__ == '__main__':
     setting = ModelParam(args.lr[0], args.lr_decay[0],
@@ -201,5 +211,5 @@ if __name__ == '__main__':
 
     prob = PolicyPong(setting.save_path, args.test_model)
     agent = PolicyAgent(prob, setting)
-    agent.train(1000, 5)
+    agent.train(10000, 1)
 
