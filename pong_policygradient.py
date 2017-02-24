@@ -17,6 +17,8 @@ action_list = list(range(6))
 parser = argparse.ArgumentParser(description='MountainCar-v0')
 parser.add_argument('--n_eps', metavar='episode', type=int, nargs=1, default=[100],
                     help='Total number of episodes used to train.')
+parser.add_argument('--batch_size', metavar='bsize', type=int, nargs=1, default=[10],
+                    help='Total number of episodes used to train.')
 parser.add_argument('--gamma', type=float, nargs=1, default=[0.99], help='Discount factor of Q-learning')
 parser.add_argument('--lr', type=float, nargs=1, default=[0.1], help='Learning rate for gradient update')
 parser.add_argument('--lr_decay', metavar='decay', type=float, nargs=1, default=[0],
@@ -146,7 +148,7 @@ class PolicyAgent():
             state = self.prob.reset_environment()
             while True:
                 action = self.actor.predict(self.sess, state)
-                self.prob.render()
+                # self.prob.render()
                 next_state, reward, done = self.prob.step(action)
                 lstate.append(state)
                 laction.append(action)
@@ -169,6 +171,7 @@ class PolicyAgent():
         return self.setting.lr
 
     def run_for_fun(self):
+        print("Playing for fun")
         state = self.prob.reset_environment()
         while True:
             action = self.actor.predict(self.sess, state)
@@ -185,7 +188,8 @@ class PolicyAgent():
             #print(b_values)
 
             self.actor.train(self.sess, self.get_lr(), b_inputs, b_actions, b_values)
-            print("Step {} - Elapsed time: {}s\nLearning rate {}\nAverage reward {}".format(_, time.time()-start,self.get_lr(), average_reward))
+            print("Step {} - Elapsed time: {}s\nLearning rate {} - Batch size {}\nAverage reward {}".
+                  format(_, time.time()-start, self.get_lr(), batch_size, average_reward))
             summary = self.sess.run(tf.summary.merge_all(key='reward'), {self.average_reward: average_reward})
             self.train_writer.add_summary(summary, gb)
 
@@ -195,8 +199,7 @@ class PolicyAgent():
             gb += 1
             self.sess.run(self.global_step.assign(gb))
 
-            if _ % 1 == 0:
-                print("Play for fun")
+            if _ % 100 == 0:
                 self.run_for_fun()
 
 
@@ -211,5 +214,5 @@ if __name__ == '__main__':
 
     prob = PolicyPong(setting.save_path, args.test_model)
     agent = PolicyAgent(prob, setting)
-    agent.train(10000, 1)
+    agent.train(args.n_eps[0], args.batch_size[0])
 
