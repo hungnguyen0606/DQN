@@ -55,11 +55,12 @@ args = parser.parse_args()
 class PolicyPong(Problem):
     def __init__(self, save_path, is_test):
         self.env = gym.make('Pong-ram-v0')
+        self.last_state = None
         if is_test:
             self.env = Monitor(self.env, save_path)
 
     def get_state_size(self):
-        return 128
+        return 256
 
     def get_num_actions(self):
         return 6
@@ -68,12 +69,18 @@ class PolicyPong(Problem):
         return self.env.action_space.sample()
 
     def step(self, action):
+        assert self.last_state is not None, 'Must reset environment before playing'
         state, reward, done, _ = self.env.step(action)
-        return self.state_normalize(state), reward, done
+        state = self.state_normalize(state)
+        tmp = state
+        state = np.concatenate((self.last_state, state))
+        self.last_state = tmp
+        return state, reward, done
 
     def reset_environment(self):
         state = self.env.reset()
-        return self.state_normalize(state)
+        self.last_state = self.state_normalize(state)
+        return np.concatenate((self.last_state, self.last_state))
 
     def render(self):
         self.env.render()
@@ -92,11 +99,9 @@ class Actor():
         self.lr = tf.placeholder(tf.float32, name='learning_rate')
 
         self.inputs = tf.placeholder(tf.float32, [None, self.state_size], 'input')
-        self.hidden1 = layers.fully_connected(self.inputs, 256)
-        self.hidden2 = layers.fully_connected(self.hidden1, 128)
-        self.log_prob = layers.fully_connected(self.hidden2, self.num_action)
-        self.policy = tf.nn.softmax(self.log_prob)
-
+        self.hidden1 = layers.fully_connected(self.inputs, 128)
+        # self.hidden2 = layers.fully_connected(self.hidden1, 128)
+        self.policy = layers.fully_connected(self.hidden1, self.num_action, activation_fn=tf.nn.softmax)
 
         self.value = tf.placeholder(tf.float32, name='episode_return')
         self.action_indices = tf.placeholder(tf.int32, name='action_indices')
@@ -104,7 +109,7 @@ class Actor():
         self.policy_loss = tf.reduce_mean(tf.log(tf.reduce_sum(self.policy*self.actions, axis=1, name='sum'), name='log')*self.value, name='policy_loss')
 
         # use gradient ascent to maximize the expected return
-        self.train_ops = tf.train.RMSPropOptimizer(self.lr).minimize(-self.policy_loss)
+        self.train_ops = tf.train.RMSPropOptimizer(self.lr, 0.99).minimize(-self.policy_loss)
 
     def train(self, sess, lr, inputs, actions, values):
         sess.run(self.train_ops, {self.inputs: inputs, self.action_indices: actions, self.value: values, self.lr: lr})
@@ -112,7 +117,7 @@ class Actor():
     def predict(self, sess, state):
         states = [state]
         policy = sess.run(self.policy, {self.inputs: states})[0]
-        return np.random.choice(action_list)
+        return np.random.choice(action_list, p=policy)
 
 
 class PolicyAgent():
@@ -164,7 +169,9 @@ class PolicyAgent():
                 pass
             else:
                 lreward[i] += self.setting.gamma * lreward[i + 1]
-
+        mean = np.mean(lreward)
+        std = np.std(lreward)
+        lreward = (lreward-mean)/std
         return lstate, laction, lreward, average_reward
 
     def get_lr(self):
