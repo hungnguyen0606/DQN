@@ -57,7 +57,7 @@ class PolicyPong(Problem):
         self.env = gym.make('Pong-ram-v0')
         self.last_state = None
         if is_test:
-            self.env = Monitor(self.env, save_path)
+            self.env = Monitor(self.env, save_path, force=True)
 
     def get_state_size(self):
         return 256
@@ -182,7 +182,7 @@ class PolicyAgent():
         state = self.prob.reset_environment()
         while True:
             action = self.actor.predict(self.sess, state)
-            _, _, done = self.prob.step(action)
+            state , _, done = self.prob.step(action)
             self.prob.render()
             if done:
                 break
@@ -222,4 +222,4 @@ if __name__ == '__main__':
     prob = PolicyPong(setting.save_path, args.test_model)
     agent = PolicyAgent(prob, setting)
     agent.train(args.n_eps[0], args.batch_size[0])
-
+    # agent.run_for_fun()
