@@ -177,15 +177,16 @@ class PolicyAgent():
     def get_lr(self):
         return self.setting.lr
 
-    def run_for_fun(self):
+    def run_for_fun(self, num_eps=100):
         print("Playing for fun")
-        state = self.prob.reset_environment()
-        while True:
-            action = self.actor.predict(self.sess, state)
-            state , _, done = self.prob.step(action)
-            self.prob.render()
-            if done:
-                break
+        for _ in range(num_eps):
+            state = self.prob.reset_environment()
+            while True:
+                action = self.actor.predict(self.sess, state)
+                state , _, done = self.prob.step(action)
+                # self.prob.render()
+                if done:
+                    break
 
     def train(self, max_step=5000, batch_size=10):
         gb = self.sess.run(self.global_step)
@@ -221,5 +222,5 @@ if __name__ == '__main__':
 
     prob = PolicyPong(setting.save_path, args.test_model)
     agent = PolicyAgent(prob, setting)
-    agent.train(args.n_eps[0], args.batch_size[0])
-    # agent.run_for_fun()
+    # agent.train(args.n_eps[0], args.batch_size[0])
+    agent.run_for_fun()
